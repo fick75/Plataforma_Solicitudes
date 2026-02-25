@@ -6,6 +6,7 @@
 <title>CITRO — Sistema de Trámites v3</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
 <style>
 :root{
@@ -467,7 +468,7 @@ tbody td{padding:9px 12px;font-size:.8rem;vertical-align:middle}
     </div>
 
     <div class="acuse-btns" style="padding:12px 24px 18px;gap:8px">
-      <button class="btn btn-ghost btn-sm" onclick="acuseImprimir()" style="flex:1;justify-content:center">&#128247; Imprimir</button>
+      <button class="btn btn-ghost btn-sm" onclick="acuseImprimir()" style="flex:1;justify-content:center">&#128196; Descargar PDF</button>
       <button class="btn btn-secondary btn-sm" onclick="acuseNuevo()" style="flex:1;justify-content:center">+ Nuevo</button>
       <button class="btn btn-ghost btn-sm" onclick="cerrarAcuse()" style="flex:1;justify-content:center">Cerrar</button>
     </div>
@@ -1586,11 +1587,11 @@ function _setEmailStatus(which, sent, txt, via, dest) {
     rowEl.style.borderColor = 'rgba(26,122,74,.3)';
     rowEl.style.background  = 'rgba(26,122,74,.04)';
   } else {
-    icoEl.innerHTML = via === 'mailto' ? '&#128231;' : '&#9888;';
-    icoEl.style.color = via === 'mailto' ? 'var(--blue)' : 'var(--amber)';
-    txtEl.textContent = txt;
-    rowEl.style.borderColor = via === 'mailto' ? 'rgba(27,95,168,.22)' : 'rgba(232,146,10,.28)';
-    rowEl.style.background  = via === 'mailto' ? 'rgba(27,95,168,.04)' : 'rgba(232,146,10,.04)';
+    icoEl.innerHTML = '&#9888;';
+    icoEl.style.color = 'var(--amber,#E8920A)';
+    txtEl.textContent = via === 'GAS' ? txt : 'Error al enviar - usa el boton de reenvio manual';
+    rowEl.style.borderColor = 'rgba(232,146,10,.28)';
+    rowEl.style.background  = 'rgba(232,146,10,.04)';
   }
 }
 
@@ -1660,7 +1661,23 @@ function acuseImprimir() {
     '</body></html>'
   );
   w.document.close();
-  setTimeout(function(){ w.print(); }, 300);
+
+  // Esperar que cargue el contenido y generar PDF con html2pdf
+  setTimeout(function(){
+    if(typeof html2pdf !== 'undefined'){
+      var opt = {
+        margin:      [12, 15, 12, 15],
+        filename:    folio + '_acuse_CITRO.pdf',
+        image:       { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      html2pdf().set(opt).from(w.document.body).save().then(function(){ w.close(); });
+    } else {
+      // Fallback si html2pdf no cargó
+      w.print();
+    }
+  }, 400);
 }
 
 // Descarga ZIP
@@ -1774,14 +1791,15 @@ async function submitForm(type) {
     } catch(e){ /* fallback to mailto in acuse */ }
   }
 
-  // 4. Si no hay GAS, abrir mailto automaticamente al terminar
-  if(emailStatus.via !== 'GAS'){
-    // Abrir correo a CtTramites con CC al solicitante
-    abrirCorreoCompleto(record, type, files);
-  }
-
+  // 4. Resultado del envío
   btn.disabled = false;
   btn.innerHTML = '&#8595; Registrar + Enviar';
+
+  if(!gasUrl) {
+    // Sin backend configurado: avisar y abrir mailto como respaldo
+    showAlert(type, 'error', 'Backend no configurado. Se abrira el cliente de correo como respaldo.');
+    abrirCorreoCompleto(record, type, files);
+  }
 
   // 5. Mostrar acuse de recibo
   showAcuse(record, type, files, emailStatus);
